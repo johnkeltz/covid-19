@@ -1,0 +1,9 @@
+census_county_msa_crosswalk_sept_2018.csv: 
+  https://www.census.gov/geographies/reference-files/time-series/demo/metro-micro/delineation-files.html
+  Original file was named, "census_county_msa_crosswalk_sept_2018.xlsx"
+county populations.csv: 
+  https://www.census.gov/data/datasets/time-series/demo/popest/2010s-counties-total.html
+  Original file was named, "co-est2019-alldata.csv"
+metropolitan-population-2019.csv & micropolitan-population-2019.csv:
+  https://www.census.gov/data/tables/time-series/demo/popest/2010s-total-metro-and-micro-statistical-areas.html
+  Named, cbsa-met-est2019-annres.xlsx & cbsa-mic-est2019-annres.xlsx
