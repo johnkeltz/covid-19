@@ -2,10 +2,11 @@
   #pulls nyt county covid-19 data
   #aggregates to metro
   #merges in populations
+  #stack metro and county data to allow toggle
   #formats for visual in tableau
 
 #####pull county case and deaths data from nytimes github- https://github.com/nytimes/covid-19-data
-##ata refreshes mid-day with previous day's data
+##data refreshes mid-day with previous day's data
 #they ask to link to this page: https://www.nytimes.com/interactive/2020/us/coronavirus-us-cases.html
 #install.packages("RCurl")
 library(RCurl)
@@ -41,14 +42,13 @@ county.counts$region <- ifelse(county.counts$county=="Kansas City","Kansas City,
 
 #change states to abbreviations to be consistent with region names next step
 county.counts$state.ab <- state.abb[match(county.counts$state,state.name)]
-
-#assign county name to region if region is missing
-#include marker for later
-county.counts$no.msa <- ifelse(is.na(county.counts$region),1,0)
-county.counts$region <- ifelse(is.na(county.counts$region),paste(county.counts$county,"County,",county.counts$state.ab,sep=" "),county.counts$region)
+# 
+# #assign county name to region if region is missing
+# #include marker for later
+# county.counts$no.msa <- ifelse(is.na(county.counts$region),1,0)
+# county.counts$region <- ifelse(is.na(county.counts$region),paste(county.counts$county,"County,",county.counts$state.ab,sep=" "),county.counts$region)
 
 ######add county populations
-#this is a little messy b/c I drop the populations when I aggregate, but I do use them later for non metro and micro areas
 #data originally from here: https://www.census.gov/data/datasets/time-series/demo/popest/2010s-counties-total.html
 pops.data <- getURL("https://raw.githubusercontent.com/johnkeltz/covid-19/master/data/county%20populations.csv")
 pops <- read.csv(text = pops.data)
@@ -72,20 +72,8 @@ colnames(metro.deaths) <- c("region","date","deaths")
 
 metro <- merge(metro.cases,metro.deaths,by=c("region","date"))
 
-#add current totals to historical records for easier filtering in tableau
-metro <- transform(metro, deaths.total=ave(deaths,region,FUN=max))
-
-metro <- transform(metro, cases.total=ave(cases,region,FUN=max))
-
-####what is blank region?
-
 #######add metro populations...
 #source: https://www.census.gov/data/tables/time-series/demo/popest/2010s-total-metro-and-micro-statistical-areas.html
-# metro.pop <- read_excel("C:/Users/john.keltz/Desktop/Projects/Coronavirus/Source/cbsa-met-est2019-annres.xlsx")
-# 
-# micro.pop <- read_excel("C:/Users/john.keltz/Desktop/Projects/Coronavirus/Source/cbsa-mic-est2019-annres.xlsx")
-
-
 met.pop.data <- getURL("https://raw.githubusercontent.com/johnkeltz/covid-19/master/data/metropolitan-population-2019.csv")
 metro.pop <- read.csv(text = met.pop.data)
 
@@ -99,34 +87,53 @@ colnames(area.pops) <- c("region","population")
 #merging on name, but both files come from census.gov and use same names
 metro <- merge(metro,area.pops,by=c("region"),all.x=TRUE)
 
-#add county populations
-county.pops <- unique(county.counts[which(county.counts$no.msa==1),c(7,10)])
-colnames(county.pops) <- c("region","county.pop")
+metro$type <- "Metropolitan / Micropolitan Area"
 
-metro <- merge (metro,county.pops,by=c("region"),all=TRUE)
-metro$population <- ifelse(is.na(metro$population),metro$county.pop,metro$population)
-metro$county.pop <- NULL
+#stack with county
 
-#add days since x cases, y deaths? (not yet completed)
+county <- county.counts
+county$region <- paste(county$county,county$state.ab,sep=", ")
+
+county.keeps <- c("region", "date", "cases", "deaths", "POPESTIMATE2019")
+county <- county[county.keeps]
+colnames(county) <- c("region", "date", "cases", "deaths", "population")
+
+county$type <- "County"
+
+metro.county <- rbind(metro,county)
+
+#add days since x cases, y deaths? (not yet completed, right now calculating in tableau)
 #91-dicov uses 20 cases, 10 deaths, 1 case/million, 1 death per million...
 #might have to use smaller cutoffs because dealing with smaller areas
 
+#add current totals to historical records for easier filtering in tableau
+metro.county <- transform(metro.county, deaths.total=ave(deaths,region,FUN=max))
+
+metro.county <- transform(metro.county, cases.total=ave(cases,region,FUN=max))
+
 #sort
-metro <- metro[order(metro$region,metro$date),]
+metro.county <- metro.county[order(metro.county$region,metro.county$date),]
 
 #make main state column
 #metro areas that span multiple states have the main state first
 #grab second and third digits after comma...
-metro$state.ab <- substr(metro$region,regexpr(",",metro$region)+2,regexpr(",",metro$region)+3)
+metro.county$state.ab <- substr(metro.county$region,regexpr(",",metro.county$region)+2,regexpr(",",metro.county$region)+3)
 
 #convert state abreviation to full name
-metro$state <- state.name[match(metro$state.ab,state.abb)]
+metro.county$state <- state.name[match(metro.county$state.ab,state.abb)]
 
 #region short name for simple graph labels
 #everything before first hyphen or comma
-metro$region.ab <- substr(metro$region,1,regexpr(",|-",metro$region)-1)
+metro.county$region.ab <- substr(metro.county$region,1,regexpr(",|-",metro.county$region)-1)
+
+metro.county$region.ab.st <- paste(metro.county$region.ab, metro.county$state.ab, sep=", ")
+
+#add populations for new york city and kansas city 
+#special case- only two city geographies in NYT data set
+metro.county$population <- ifelse(metro.county$region == "New York City, NY", 8700000, metro.county$population)
+metro.county$population <- ifelse(metro.county$region == "Kansas City, MO", 491918, metro.county$population)
 
 #output for tableau
-write.csv(metro,"FILE PATH AND NAME.csv",row.names = FALSE)
+write.csv(metro.county,"C:/Users/john.keltz/Desktop/Projects/Coronavirus/Data/metro county stacked.csv",row.names = FALSE)
 
 
